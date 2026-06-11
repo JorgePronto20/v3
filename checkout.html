@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comprar Licença</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <div class="card">
+        <h1>💳 Comprar Licença (MB WAY)</h1>
+
+        <div class="form-grid">
+            <input type="text" id="empresa" placeholder="Nome da Empresa">
+            <input type="email" id="email" placeholder="Email do Cliente">
+            <input type="text" id="telefone" placeholder="Telefone MB WAY">
+            <input type="number" id="dias" placeholder="Validade (dias)">
+        </div>
+
+        <button class="btn btn-primary" onclick="gerarPedido()">
+            Gerar Pedido MB WAY
+        </button>
+
+        <div id="resultado" class="stats" style="display:none;"></div>
+    </div>
+
+</div>
+
+<script src="assets/checkout.js"></script>
+</body>
+</html>

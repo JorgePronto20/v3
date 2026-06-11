@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FaturaLite — V3</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    background:#f4f6f9;
+    font-family:Segoe UI, sans-serif;
+    padding:40px;
+}
+
+.container{
+    max-width:900px;
+    margin:auto;
+    text-align:center;
+}
+
+.card{
+    background:white;
+    padding:40px;
+    border-radius:20px;
+    box-shadow:0 5px 20px rgba(0,0,0,.08);
+}
+
+h1{
+    font-size:32px;
+    color:#2c3e50;
+    margin-bottom:10px;
+}
+
+p{
+    font-size:17px;
+    color:#555;
+    margin-bottom:30px;
+}
+
+.menu{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:20px;
+    margin-top:20px;
+}
+
+.btn{
+    display:block;
+    width:260px;
+    padding:18px;
+    border-radius:12px;
+    text-decoration:none;
+    font-size:18px;
+    font-weight:bold;
+    transition:.3s;
+    color:white;
+}
+
+.btn-blue{
+    background:#3498db;
+}
+.btn-blue:hover{
+    background:#2980b9;
+}
+
+.btn-green{
+    background:#2ecc71;
+}
+.btn-green:hover{
+    background:#27ae60;
+}
+
+.btn-dark{
+    background:#34495e;
+}
+.btn-dark:hover{
+    background:#2c3e50;
+}
+
+.footer{
+    margin-top:40px;
+    font-size:14px;
+    color:#777;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="card">
+
+        <h1>🚀 FaturaLite — Versão 3</h1>
+        <p>Bem-vindo ao painel principal da nova versão online do sistema FaturaLite.</p>
+
+        <div class="menu">
+
+            <a href="gerar.html" class="btn btn-blue">
+                🔑 Gerar Licenças
+            </a>
+
+            <a href="admin.html" class="btn btn-green">
+                📊 Painel de Administração
+            </a>
+
+            <a href="checkout.html" class="btn btn-dark">
+                💳 Comprar Licença (MB WAY)
+            </a>
+
+        </div>
+
+    </div>
+
+    <div class="footer">
+        FaturaLite © 2026 — Desenvolvido por Jorge Pronto
+    </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Licenças</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    background:#f4f6f9;
+    font-family:Segoe UI, sans-serif;
+    padding:30px;
+}
+
+.container{
+    max-width:1100px;
+    margin:auto;
+}
+
+.card{
+    background:white;
+    padding:25px;
+    border-radius:15px;
+    box-shadow:0 5px 15px rgba(0,0,0,.08);
+}
+
+h1{
+    text-align:center;
+    margin-bottom:25px;
+    color:#2c3e50;
+}
+
+.form-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:15px;
+}
+
+input{
+    width:100%;
+    padding:12px;
+    border:1px solid #ddd;
+    border-radius:8px;
+    font-size:15px;
+}
+
+.btn{
+    border:none;
+    padding:12px;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:bold;
+    transition:.3s;
+}
+
+.btn-primary{
+    background:#3498db;
+    color:white;
+}
+
+.btn-primary:hover{
+    background:#2980b9;
+}
+
+.btn-success{
+    background:#2ecc71;
+    color:white;
+}
+
+.btn-success:hover{
+    background:#27ae60;
+}
+
+.btn-danger{
+    background:#e74c3c;
+    color:white;
+}
+
+.btn-danger:hover{
+    background:#c0392b;
+}
+
+.actions{
+    display:flex;
+    gap:10px;
+    margin-top:15px;
+}
+
+.stats{
+    margin-top:20px;
+    padding:15px;
+    background:#eef6ff;
+    border-radius:10px;
+    font-weight:bold;
+}
+
+table{
+    width:100%;
+    margin-top:20px;
+    border-collapse:collapse;
+    background:white;
+}
+
+th{
+    background:#34495e;
+    color:white;
+}
+
+th,td{
+    padding:12px;
+    border:1px solid #ddd;
+    text-align:center;
+}
+
+.small-btn{
+    padding:6px 10px;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+.copy{
+    background:#3498db;
+    color:white;
+}
+
+.delete{
+    background:#e74c3c;
+    color:white;
+}
+
+@media(max-width:768px){
+    .form-grid{
+        grid-template-columns:1fr;
+    }
+
+    .actions{
+        flex-direction:column;
+    }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="card">
+
+        <h1>🔑 Gerador de Licenças</h1>
+
+        <div class="form-grid">
+            <input type="text" id="empresa" placeholder="Nome da Empresa">
+            <input type="number" id="dias" placeholder="Validade em dias">
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" onclick="gerar()">
+                Gerar Licença
+            </button>
+
+            <button class="btn btn-success" onclick="exportarTXT()">
+                Exportar TXT
+            </button>
+
+            <button class="btn btn-danger" onclick="limparTudo()">
+                Apagar Todas
+            </button>
+        </div>
+
+        <div class="stats">
+            Total de Licenças: <span id="total">0</span>
+        </div>
+
+    </div>
+
+    <table>
+        <thead>
+        <tr>
+            <th>Empresa</th>
+            <th>Licença</th>
+            <th>Criação</th>
+            <th>Validade</th>
+            <th>Ações</th>
+        </tr>
+        </thead>
+
+        <tbody id="lista"></tbody>
+    </table>
+
+</div>
+
+<script>
+const WORKER_URL = "https://faturalite-licenses.jorgepronto20.workers.dev";
+
+let licencas = JSON.parse(localStorage.getItem("licencas")) || [];
+
+function bloco() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let out = "";
+    for(let i=0;i<4;i++){
+        out += chars.charAt(Math.floor(Math.random()*chars.length));
+    }
+    return out;
+}
+
+function gerarLicenca(){
+    return `${bloco()}-${bloco()}-${bloco()}-${bloco()}`;
+}
+
+function guardar(){
+    localStorage.setItem("licencas", JSON.stringify(licencas));
+}
+
+function atualizarTabela(){
+    const lista = document.getElementById("lista");
+    lista.innerHTML = "";
+
+    licencas.forEach((item,index)=>{
+        lista.innerHTML += `
+        <tr>
+            <td>${item.empresa}</td>
+            <td>${item.licenca}</td>
+            <td>${item.criacao}</td>
+            <td>${item.validade}</td>
+            <td>
+                <button class="small-btn copy" onclick="copiarLicenca('${item.licenca}')">Copiar</button>
+                <button class="small-btn" style="background:#2ecc71;color:white" onclick="enviarServidor(${index})">Enviar</button>
+                <button class="small-btn delete" onclick="remover(${index})">Remover</button>
+            </td>
+        </tr>
+        `;
+    });
+
+    document.getElementById("total").innerText = licencas.length;
+}
+
+function gerar(){
+    const empresa = document.getElementById("empresa").value.trim();
+    const dias = parseInt(document.getElementById("dias").value);
+
+    if(!empresa || !dias){
+        alert("Preencha todos os campos.");
+        return;
+    }
+
+    const hoje = new Date();
+    const validade = new Date();
+    validade.setDate(hoje.getDate() + dias);
+
+    const novaLicenca = {
+        empresa,
+        licenca: gerarLicenca(),
+        criacao: hoje.toISOString().slice(0,10),
+        validade: validade.toISOString().slice(0,10)
+    };
+
+    licencas.push(novaLicenca);
+
+    guardar();
+    atualizarTabela();
+
+    document.getElementById("empresa").value="";
+    document.getElementById("dias").value="";
+}
+
+function copiarLicenca(codigo){
+    navigator.clipboard.writeText(codigo);
+    alert("Licença copiada!");
+}
+
+function remover(index){
+    if(!confirm("Remover licença?"))
+        return;
+
+    licencas.splice(index,1);
+
+    guardar();
+    atualizarTabela();
+}
+
+function limparTudo(){
+    if(!confirm("Apagar todas as licenças?"))
+        return;
+
+    licencas = [];
+
+    guardar();
+    atualizarTabela();
+}
+
+function exportarTXT(){
+    if(licencas.length === 0){
+        alert("Nenhuma licença para exportar.");
+        return;
+    }
+
+    let texto = "";
+
+    licencas.forEach(item => {
+        texto +=
+`Empresa: ${item.empresa}
+Licença: ${item.licenca}
+Criação: ${item.criacao}
+Validade: ${item.validade}
+------------------------------------
+`;
+    });
+
+    const blob = new Blob([texto], {type:"text/plain"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "licencas.txt";
+    a.click();
+}
+
+async function enviarServidor(index){
+    const adminSecret = prompt("Introduza o ADMIN_SECRET para enviar ao servidor:");
+
+    if(!adminSecret){
+        alert("Operação cancelada.");
+        return;
+    }
+
+    const item = licencas[index];
+
+    const payload = {
+        action: "create",
+        key: item.licenca,
+        name: item.empresa,
+        expiry: item.validade,
+        plan: "standard",
+        email: "",
+        adminSecret
+    };
+
+    try{
+        const resposta = await fetch(WORKER_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const dados = await resposta.json();
+
+        if(dados.ok){
+            alert("Licença enviada e criada no servidor!");
+        } else {
+            alert("Erro ao enviar: " + JSON.stringify(dados));
+        }
+    }catch(e){
+        alert("Erro de comunicação com o servidor.");
+        console.error(e);
+    }
+}
+
+atualizarTabela();
+</script>
+
+</body>
+</html>

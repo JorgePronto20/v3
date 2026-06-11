@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Administração</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <div class="card">
+        <h1>📊 Painel de Administração</h1>
+
+        <p>Consulta todas as licenças guardadas no servidor.</p>
+
+        <button class="btn btn-primary" onclick="carregarLicencas()">
+            Carregar Licenças
+        </button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Empresa</th>
+                <th>Licença</th>
+                <th>Criação</th>
+                <th>Validade</th>
+                <th>Plano</th>
+            </tr>
+        </thead>
+        <tbody id="tabela"></tbody>
+    </table>
+
+</div>
+
+<script src="assets/admin.js"></script>
+</body>
+</html>
