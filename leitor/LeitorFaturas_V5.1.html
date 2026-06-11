@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a2744">
+  <title>FaturaLite — Leitor de Faturas QR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --navy: #1a2744;
+      --navy-mid: #243560;
+      --accent: #3b82f6;
+      --accent-light: #60a5fa;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #f0f4ff;
+      --surface: #ffffff;
+      --surface2: #f8faff;
+      --border: #d1daf5;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --font: 'Segoe UI', system-ui, sans-serif;
+      --mono: 'Consolas', 'Courier New', monospace;
+      --radius: 10px;
+      --shadow: 0 2px 12px rgba(26,39,68,0.10);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* HEADER */
+    header {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 100%);
+      color: white; padding: 18px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header h1 span { color: var(--accent-light); }
+    header p { font-size: 0.7rem; opacity: 0.55; margin-top: 2px; }
+    #license-badge {
+      font-size: 0.72rem; padding: 4px 12px; border-radius: 20px;
+      font-weight: 600; letter-spacing: 0.5px;
+    }
+    #license-badge.checking { background: #94a3b8; color: white; }
+    #license-badge.trial    { background: var(--warning); color: #7c3a00; }
+    #license-badge.valid    { background: var(--success); color: white; }
+    #license-badge.expired  { background: var(--danger);  color: white; }
+
+    /* MAIN */
+    main { max-width: 1300px; margin: 0 auto; padding: 24px 20px 40px; }
+
+    /* CARDS */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 18px; box-shadow: var(--shadow); }
+    .card-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 14px; }
+
+    /* UPLOAD ZONE */
+    #drop-zone {
+      border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px;
+      text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; background: var(--surface2);
+    }
+    #drop-zone:hover, #drop-zone.dragover { border-color: var(--accent); background: #eff6ff; }
+    #drop-zone p { color: var(--text-muted); font-size: 0.92rem; margin-top: 6px; }
+    #drop-zone .icon { font-size: 2.2rem; }
+    #pdf-upload { display: none; }
+
+    /* PROGRESS */
+    #progress-wrap { display: none; margin-top: 14px; }
+    #progress-bar-outer { background: var(--border); border-radius: 6px; height: 8px; overflow: hidden; }
+    #progress-bar-inner { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); width: 0%; transition: width 0.3s; border-radius: 6px; }
+    #progress-text { font-size: 0.82rem; color: var(--text-muted); margin-top: 6px; }
+
+    /* BUTTONS */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: none; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
+    .btn:active { transform: scale(0.97); }
+    .btn:hover { opacity: 0.88; }
+    .btn-primary  { background: var(--accent);   color: white; }
+    .btn-success  { background: var(--success);  color: white; }
+    .btn-warning  { background: var(--warning);  color: #7c3a00; }
+    .btn-danger   { background: var(--danger);   color: white; }
+    .btn-navy     { background: var(--navy);     color: white; }
+    .btn-outline  { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); }
+    .btn-sm       { padding: 5px 10px; font-size: 0.78rem; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+
+    /* MANUAL */
+    #qr-manual { width: 100%; font-family: var(--mono); font-size: 0.88rem; border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 14px; resize: vertical; min-height: 42px; background: var(--surface2); color: var(--text); transition: border-color 0.2s; }
+    #qr-manual:focus { outline: none; border-color: var(--accent); }
+
+    /* FAILURES */
+    #falhas-box { display: none; margin-top: 10px; border: 1.5px solid #fca5a5; padding: 12px 16px; background: #fff5f5; border-radius: 8px; }
+    #falhas-box h4 { color: var(--danger); font-size: 0.85rem; margin-bottom: 6px; }
+    #falhas-box ul { padding-left: 18px; font-size: 0.82rem; color: #991b1b; }
+    #ocr-status { display: none; margin-top: 10px; padding: 10px 14px; background: #fff7ed; border: 1.5px solid #fed7aa; border-radius: 8px; font-size: 0.83rem; color: #92400e; }
+
+    /* STATS */
+    #stats-bar { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stat-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; font-size: 0.82rem; color: var(--text-muted); box-shadow: var(--shadow); }
+    .stat-chip strong { display: block; font-size: 1.2rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+
+    /* TABLE */
+    .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; background: var(--surface); }
+    thead tr { background: var(--navy); color: white; }
+    th { padding: 10px 12px; font-weight: 600; white-space: nowrap; text-align: left; }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f0f4ff; }
+    tbody tr.destacada td { background: #d1fae5 !important; transition: background 0.4s; }
+    tbody tr.duplicada  td { background: #fee2e2 !important; transition: background 0.5s; }
+    input.valor { width: 88px; text-align: right; border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; font-size: 0.83rem; background: var(--surface2); }
+    input.classificacao { width: 160px; border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; font-size: 0.83rem; background: var(--surface2); }
+    input.valor:focus, input.classificacao:focus { outline: none; border-color: var(--accent); }
+    input[type="checkbox"] { transform: scale(1.4); accent-color: var(--accent); }
+    .btn-delete-row { background: none; border: none; cursor: pointer; font-size: 1rem; color: var(--danger); padding: 2px 6px; border-radius: 4px; transition: background 0.15s; }
+    .btn-delete-row:hover { background: #fee2e2; }
+
+    /* ── MODALS ── */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: white; border-radius: 14px; padding: 28px 32px; max-width: 400px; width: 90%; box-shadow: 0 12px 48px rgba(0,0,0,0.25); text-align: center; }
+    .modal-box .modal-icon { font-size: 2.4rem; margin-bottom: 10px; }
+    .modal-box h3 { font-size: 1.1rem; margin-bottom: 8px; }
+    .modal-box p { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; }
+
+    /* LICENSE MODAL */
+    #license-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; }
+    #license-modal-overlay.open { display: flex; }
+    #license-modal-box { background: white; border-radius: 16px; padding: 32px; max-width: 460px; width: 90%; box-shadow: 0 16px 64px rgba(0,0,0,0.3); }
+    #license-modal-box h2 { color: var(--navy); margin-bottom: 6px; font-size: 1.3rem; }
+    #license-modal-box .subtitle { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px; }
+
+    .license-input-wrap { display: flex; gap: 8px; margin-bottom: 10px; }
+    #license-key-input { flex: 1; border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 14px; font-family: var(--mono); font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; }
+    #license-key-input:focus { outline: none; border-color: var(--accent); }
+    #license-key-input.error { border-color: var(--danger); }
+    #license-key-input.success { border-color: var(--success); }
+
+    #license-feedback { font-size: 0.83rem; min-height: 20px; margin-bottom: 14px; }
+    #license-feedback.error   { color: var(--danger); }
+    #license-feedback.success { color: var(--success); }
+    #license-feedback.info    { color: var(--text-muted); }
+    #license-feedback.loading { color: var(--accent); }
+
+    .license-footer { margin-top: 16px; text-align: center; font-size: 0.76rem; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 14px; }
+    .license-footer a { color: var(--accent); }
+
+    /* BLOCKED OVERLAY — when license invalid */
+    #blocked-overlay { display: none; position: fixed; inset: 0; background: rgba(10,20,50,0.85); z-index: 1500; align-items: center; justify-content: center; }
+    #blocked-overlay.open { display: flex; }
+    #blocked-box { background: white; border-radius: 16px; padding: 36px; max-width: 420px; width: 90%; text-align: center; }
+    #blocked-box .icon { font-size: 3rem; margin-bottom: 12px; }
+    #blocked-box h2 { color: var(--navy); margin-bottom: 10px; }
+    #blocked-box p  { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
+
+    /* TOAST */
+    #toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 10px; font-size: 0.88rem; font-weight: 600; color: white; z-index: 3000; opacity: 0; transform: translateY(10px); transition: opacity 0.25s, transform 0.25s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.success { background: var(--success); }
+    #toast.error   { background: var(--danger); }
+    #toast.info    { background: var(--accent); }
+
+    footer { text-align: center; font-size: 0.72rem; color: var(--text-muted); padding: 16px; border-top: 1px solid var(--border); margin-top: 24px; }
+
+    @media (max-width: 700px) {
+      header { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .toolbar { gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ══ LICENSE MODAL ══ -->
+<div id="license-modal-overlay">
+  <div id="license-modal-box">
+    <h2>🔐 Ativar FaturaLite</h2>
+    <p class="subtitle">Insere o teu código de licença para ativar a aplicação. O código será validado online.</p>
+
+    <div class="license-input-wrap">
+      <input type="text" id="license-key-input"
+             placeholder="XXXX-XXXX-XXXX-XXXX"
+             maxlength="19"
+             autocomplete="off"
+             spellcheck="false">
+      <button class="btn btn-primary" id="btn-ativar" onclick="validarLicenca()">Ativar</button>
+    </div>
+    <div id="license-feedback" class="info">Introduz o teu código de 16 caracteres.</div>
+
+    <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="continuarDemo()">
+      Continuar em modo Demonstração (limitado)
+    </button>
+
+    <div class="license-footer">
+      Não tens licença? <a href="mailto:comercial@faturalite.pt">Adquire aqui</a> &nbsp;·&nbsp;
+      <a href="mailto:suporte@faturalite.pt">Suporte</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BLOCKED OVERLAY ══ -->
+<div id="blocked-overlay">
+  <div id="blocked-box">
+    <div class="icon" id="blocked-icon">⏰</div>
+    <h2 id="blocked-title">Licença Expirada</h2>
+    <p id="blocked-msg">A tua licença expirou. Renova para continuar a usar o FaturaLite.</p>
+    <button class="btn btn-primary" onclick="abrirLicencaModal()">🔑 Inserir nova licença</button>
+    <div style="margin-top:12px;">
+      <a href="mailto:jorgepronto20@hotmail.com" style="font-size:0.82rem;color:var(--accent)">jorgepronto20@hotmail.com</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONFIRM (apagar tudo) ══ -->
+<div id="confirm-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-icon">🗑️</div>
+    <h3 id="confirm-title">Apagar todas as faturas?</h3>
+    <p id="confirm-msg">Esta ação é irreversível.</p>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="confirm-yes">Sim, apagar tudo</button>
+      <button class="btn btn-outline" onclick="fecharModal('confirm-modal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div>
+    <h1>📄 Fatura<span>Lite</span></h1>
+    <p>Leitor de Faturas com QR Code &amp; OCR · Developed by Jorge Pronto</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span id="license-badge" class="checking">⏳ A verificar…</span>
+    <button class="btn btn-outline btn-sm" onclick="abrirLicencaModal()">🔑 Licença</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- UPLOAD -->
+  <div class="card">
+    <div class="card-title">📥 Importar Documentos (PDF)</div>
+    <div id="drop-zone"
+         onclick="document.getElementById('pdf-upload').click()"
+         ondragover="event.preventDefault();this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="handleDrop(event)">
+      <div class="icon">📂</div>
+      <strong>Clica ou arrasta PDFs para aqui</strong>
+      <p>Múltiplos ficheiros · QR Code automático · OCR para faturas digitalizadas</p>
+    </div>
+    <input type="file" id="pdf-upload" accept="application/pdf" multiple>
+    <div id="progress-wrap">
+      <div id="progress-bar-outer"><div id="progress-bar-inner"></div></div>
+      <div id="progress-text">A processar…</div>
+    </div>
+    <div id="falhas-box">
+      <h4>⚠️ Sem QR Code — a tentar OCR:</h4>
+      <ul id="falhas-lista"></ul>
+    </div>
+    <div id="ocr-status">🔍 OCR ativo: a reconhecer texto em documentos digitalizados…</div>
+  </div>
+
+  <!-- MANUAL -->
+  <div class="card">
+    <div class="card-title">✍️ Inserção Manual / Scanner</div>
+    <textarea id="qr-manual" placeholder="Cola aqui o conteúdo do QR Code ou usa um scanner de mão. Confirma com Enter."></textarea>
+  </div>
+
+  <!-- STATS + TOOLBAR -->
+  <div id="stats-bar">
+    <div class="stat-chip"><strong id="stat-total">0</strong>Faturas</div>
+    <div class="stat-chip"><strong id="stat-total-valor">0,00 €</strong>Total s/ IVA</div>
+    <div class="stat-chip"><strong id="stat-total-iva">0,00 €</strong>Total IVA</div>
+    <div class="stat-chip"><strong id="stat-pagas">0</strong>Pagas</div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn btn-success" onclick="exportarCSV()">📤 Exportar CSV</button>
+    <button class="btn btn-navy"    onclick="gerarBackup()">💾 Backup JSON</button>
+    <button class="btn btn-warning" onclick="restaurarBackup()">♻️ Restaurar</button>
+    <button class="btn btn-danger"  onclick="confirmarApagarTudo()">🗑️ Apagar Tudo</button>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <table id="fatura-table">
+      <thead>
+        <tr>
+          <th>Documento</th><th>Data</th><th>NIF Fornecedor</th><th>NIF Comprador</th>
+          <th>Base (€)</th><th>IVA (€)</th><th>Total (€)</th>
+          <th>Classificação</th><th>Paga</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="fatura-tbody"></tbody>
+    </table>
+  </div>
+  <div id="empty-state" style="text-align:center;padding:40px;color:var(--text-muted);display:none;">
+    <div style="font-size:2.5rem;margin-bottom:8px;">📭</div>
+    <p>Sem faturas registadas. Importa PDFs ou usa o scanner.</p>
+  </div>
+
+</main>
+
+<footer>
+  FaturaLite v5.1 · © 2025 Jorge Pronto · Todos os direitos reservados<br>
+  <span style="font-size:0.65rem">Para licenciamento comercial: comercial@faturalite.pt</span>
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  CONFIG — substitui pelo URL do teu Cloudflare Worker
+// ════════════════════════════════════════════════════════════
+const WORKER_URL = "https://faturalite-licenses.jorgepronto20.workers.dev";
+
+
+// Chave de cache local (para não bloquear offline após validação ok)
+const LS_LICENSE_KEY  = "fl_license_key";
+const LS_LICENSE_CACHE = "fl_license_cache"; // { valid, name, expiry, plan, cachedAt }
+const CACHE_TTL_MS    = 24 * 60 * 60 * 1000; // 24h — valida online uma vez por dia
+
+// ════════════════════════════════════════════════════════════
+//  LICENSE STATE
+// ════════════════════════════════════════════════════════════
+let licenseState = { valid: false, name: "", plan: "", demo: false };
+
+async function iniciarValidacaoLicenca() {
+  const savedKey   = localStorage.getItem(LS_LICENSE_KEY);
+  const cachedRaw  = localStorage.getItem(LS_LICENSE_CACHE);
+
+  // 1. Sem chave guardada → mostrar modal
+  if (!savedKey) {
+    atualizarBadge("trial");
+    setTimeout(abrirLicencaModal, 800);
+    return;
+  }
+
+  // 2. Cache recente (< 24h) → usar cache, mas validar em background
+  if (cachedRaw) {
+    try {
+      const cache = JSON.parse(cachedRaw);
+      const age = Date.now() - (cache.cachedAt || 0);
+      if (cache.valid && age < CACHE_TTL_MS) {
+        // Aceitar cache imediatamente para não bloquear o arranque
+        licenseState = { valid: true, name: cache.name, plan: cache.plan, demo: false };
+        atualizarBadge("valid");
+        // Validar em background sem bloquear
+        validarOnline(savedKey, true);
+        return;
+      }
+    } catch {}
+  }
+
+  // 3. Sem cache ou cache expirado → validar online (bloqueia até resposta)
+  atualizarBadge("checking");
+  await validarOnline(savedKey, false);
+}
+
+async function validarOnline(key, background = false) {
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "validate", key })
+    });
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+
+    if (data.valid) {
+      licenseState = { valid: true, name: data.name, plan: data.plan, demo: false };
+      localStorage.setItem(LS_LICENSE_CACHE, JSON.stringify({
+        valid: true, name: data.name, plan: data.plan, expiry: data.expiry, cachedAt: Date.now()
+      }));
+      atualizarBadge("valid");
+      if (!background) mostrarApp();
+    } else {
+      // Licença inválida/revogada/expirada
+      licenseState = { valid: false };
+      localStorage.removeItem(LS_LICENSE_CACHE);
+      atualizarBadge(data.reason === "expired" ? "expired" : "trial");
+      if (!background) mostrarBloqueio(data.reason, data.expiry, data.name);
+    }
+  } catch (err) {
+    // Falha de rede — se há cache válido, continuar offline
+    const cachedRaw = localStorage.getItem(LS_LICENSE_CACHE);
+    if (cachedRaw) {
+      try {
+        const cache = JSON.parse(cachedRaw);
+        if (cache.valid) {
+          licenseState = { valid: true, name: cache.name + " (offline)", plan: cache.plan, demo: false };
+          atualizarBadge("valid");
+          if (!background) mostrarApp();
+          showToast("⚠️ Sem ligação — licença validada em cache.", "info");
+          return;
+        }
+      } catch {}
+    }
+    // Sem cache → modo demo com aviso
+    if (!background) {
+      licenseState = { valid: false, demo: true };
+      atualizarBadge("trial");
+      showToast("⚠️ Sem ligação ao servidor de licenças.", "error");
+    }
+  }
+}
+
+async function validarLicenca() {
+  const key = document.getElementById("license-key-input").value.trim().toUpperCase();
+  const fb  = document.getElementById("license-feedback");
+  const inp = document.getElementById("license-key-input");
+
+  if (!key || key.replace(/-/g,"").length < 12) {
+    setFeedback("Código inválido. Verifica o formato.", "error", inp);
+    return;
+  }
+
+  setFeedback("⏳ A validar online…", "loading", inp, false);
+  document.getElementById("btn-ativar").disabled = true;
+
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "validate", key })
+    });
+    const data = await res.json();
+
+    if (data.valid) {
+      licenseState = { valid: true, name: data.name, plan: data.plan, demo: false };
+      localStorage.setItem(LS_LICENSE_KEY, key);
+      localStorage.setItem(LS_LICENSE_CACHE, JSON.stringify({
+        valid: true, name: data.name, plan: data.plan, expiry: data.expiry, cachedAt: Date.now()
+      }));
+      setFeedback("✅ Licença ativa: " + data.name, "success", inp, true);
+      atualizarBadge("valid");
+      setTimeout(() => {
+        fecharModal("license-modal-overlay");
+        fecharModal("blocked-overlay");
+        mostrarApp();
+        showToast("✅ " + data.name + " ativada!", "success");
+      }, 1200);
+    } else {
+      const msgs = {
+        not_found: "❌ Código não encontrado.",
+        inactive:  "🚫 Licença revogada.",
+        expired:   "⏰ Licença expirada em " + (data.expiry || "?") + ".",
+        corrupt:   "❌ Erro nos dados da licença."
+      };
+      setFeedback(msgs[data.reason] || "❌ Código inválido.", "error", inp, false);
+    }
+  } catch (err) {
+    setFeedback("⚠️ Sem ligação ao servidor. Tenta mais tarde.", "error", inp, false);
+  }
+  document.getElementById("btn-ativar").disabled = false;
+}
+
+function continuarDemo() {
+  licenseState = { valid: false, demo: true };
+  atualizarBadge("trial");
+  fecharModal("license-modal-overlay");
+  mostrarApp();
+  showToast("Modo demonstração — funcionalidades limitadas.", "info");
+}
+
+function setFeedback(msg, type, input, ok) {
+  const fb = document.getElementById("license-feedback");
+  fb.textContent = msg;
+  fb.className = type;
+  input.className = ok ? "success" : (type === "loading" ? "" : "error");
+}
+
+function atualizarBadge(state) {
+  const b = document.getElementById("license-badge");
+  const map = {
+    checking: ["checking", "⏳ A verificar…"],
+    valid:    ["valid",    "✓ " + (licenseState.name || "Ativa")],
+    trial:    ["trial",    "⚠ DEMO"],
+    expired:  ["expired",  "⏰ EXPIRADA"]
+  };
+  const [cls, txt] = map[state] || map.trial;
+  b.className = cls;
+  b.textContent = txt;
+}
+
+function mostrarBloqueio(reason, expiry, name) {
+  const icons = { expired: "⏰", inactive: "🚫", not_found: "❌" };
+  const titles = { expired: "Licença Expirada", inactive: "Licença Revogada", not_found: "Licença Inválida" };
+  const msgs   = {
+    expired:   `A licença "${name}" expirou em ${expiry}. Renova para continuar.`,
+    inactive:  `A licença "${name}" foi revogada. Contacta o suporte.`,
+    not_found: "O código guardado não é válido. Insere um novo código."
+  };
+  document.getElementById("blocked-icon").textContent  = icons[reason]  || "❌";
+  document.getElementById("blocked-title").textContent = titles[reason] || "Licença Inválida";
+  document.getElementById("blocked-msg").textContent   = msgs[reason]   || "Licença inválida.";
+  document.getElementById("blocked-overlay").classList.add("open");
+}
+
+function mostrarApp() {
+  document.getElementById("blocked-overlay").classList.remove("open");
+}
+
+function abrirLicencaModal() {
+  document.getElementById("license-key-input").value = localStorage.getItem(LS_LICENSE_KEY) || "";
+  document.getElementById("license-feedback").textContent = "Introduz o teu código de 16 caracteres.";
+  document.getElementById("license-feedback").className = "info";
+  document.getElementById("license-key-input").className = "";
+  document.getElementById("license-modal-overlay").classList.add("open");
+}
+
+// Auto-formatar input XXXX-XXXX-XXXX-XXXX
+document.getElementById("license-key-input").addEventListener("input", function() {
+  let v = this.value.replace(/[^A-Za-z0-9]/g,"").toUpperCase().slice(0,16);
+  this.value = v.match(/.{1,4}/g)?.join("-") || v;
+});
+document.getElementById("license-key-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") validarLicenca();
+});
+
+// ════════════════════════════════════════════════════════════
+//  PDF.js Worker
+// ════════════════════════════════════════════════════════════
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ════════════════════════════════════════════════════════════
+//  UPLOAD / DROP
+// ════════════════════════════════════════════════════════════
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById("drop-zone").classList.remove("dragover");
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type === "application/pdf");
+  if (files.length) processarPDFs(files);
+}
+document.getElementById("pdf-upload").addEventListener("change", function(e) {
+  if (e.target.files.length) processarPDFs(Array.from(e.target.files));
+  e.target.value = "";
+});
+
+async function processarPDFs(files) {
+  const total = files.length;
+  let carregadas = 0;
+  const semQR = [];
+
+  document.getElementById("falhas-box").style.display = "none";
+  document.getElementById("falhas-lista").innerHTML = "";
+  document.getElementById("ocr-status").style.display = "none";
+  mostrarProgresso(true);
+
+  for (const file of files) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let encontrou = false;
+
+      for (let i = 0; i < pdf.numPages && !encontrou; i++) {
+        const page = await pdf.getPage(i + 1);
+        for (const scale of [2, 3, 1.5]) {
+          const vp = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          canvas.width = vp.width; canvas.height = vp.height;
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const qr = jsQR(imgData.data, canvas.width, canvas.height);
+          if (qr?.data) {
+            const dados = parseQRCode(qr.data);
+            if (dados.documento !== "—") { adicionarLinhaTabela(dados); encontrou = true; break; }
+          }
+        }
+      }
+      if (!encontrou) semQR.push(file);
+    } catch(err) {
+      semQR.push(file);
+    }
+    carregadas++;
+    atualizarProgresso(Math.round(carregadas / total * 100), `✅ ${carregadas} de ${total} processados`);
+  }
+
+  // OCR fallback
+  if (semQR.length) {
+    document.getElementById("ocr-status").style.display = "block";
+    const lista = document.getElementById("falhas-lista");
+    semQR.forEach(f => {
+      const li = document.createElement("li");
+      li.textContent = f.name + " — a tentar OCR…";
+      li.id = "ocr-" + encodeURIComponent(f.name);
+      lista.appendChild(li);
+    });
+    document.getElementById("falhas-box").style.display = "block";
+    for (const f of semQR) await processarComOCR(f);
+    document.getElementById("ocr-status").style.display = "none";
+  }
+
+  mostrarProgresso(false);
+  showToast(`${total - semQR.length}/${total} QR Code(s) lidos`, semQR.length === 0 ? "success" : "info");
+}
+
+async function processarComOCR(file) {
+  const liEl = document.getElementById("ocr-" + encodeURIComponent(file.name));
+  try {
+    const ab = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    const page = await pdf.getPage(1);
+    const vp = page.getViewport({ scale: 2.5 });
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const worker = await Tesseract.createWorker("por", 1, { logger: () => {} });
+    const { data: { text } } = await worker.recognize(canvas);
+    await worker.terminate();
+    const dados = extrairDadosOCR(text, file.name);
+    adicionarLinhaTabela(dados);
+    if (liEl) liEl.textContent = file.name + " — OCR concluído ✓";
+  } catch(err) {
+    if (liEl) liEl.textContent = file.name + " — ❌ OCR sem resultado";
+  }
+}
+
+function extrairDadosOCR(text, filename) {
+  const dataRe  = /(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}|\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2})/;
+  const nifRe   = /\b(\d{9})\b/g;
+  const totalRe = /total\s*[:\-]?\s*([\d\.,]+)/i;
+  const docRe   = /(?:factura|fatura|invoice|n[oº°\.]\s*)[:\s]*([A-Z0-9\/\-]+)/i;
+  const nifs = [...text.matchAll(nifRe)].map(m => m[1]);
+  const dm   = text.match(dataRe);
+  const tm   = text.match(totalRe);
+  const doc  = text.match(docRe);
+  const vt   = tm ? parseFloat(tm[1].replace(/\./g,"").replace(",",".")) : 0;
+  let dataF  = "—";
+  if (dm) { const p = dm[1].replace(/[\/\.]/g,"-").split("-"); dataF = p[0].length === 4 ? dm[1].replace(/[\/\.]/g,"-") : `${p[2]}-${p[1]}-${p[0]}`; }
+  return { documento: doc?.[1]?.trim() || `OCR-${filename.replace(".pdf","")}`, data: dataF, nifFornecedor: nifs[0]||"—", nifComprador: nifs[1]||"—", base: vt > 0 ? (vt/1.23).toFixed(2) : "0.00", iva: vt > 0 ? (vt - vt/1.23).toFixed(2) : "0.00", total: vt > 0 ? vt.toFixed(2) : "0.00", fonte: "OCR" };
+}
+
+function mostrarProgresso(show) { document.getElementById("progress-wrap").style.display = show ? "block" : "none"; }
+function atualizarProgresso(pct, txt) {
+  document.getElementById("progress-bar-inner").style.width = pct + "%";
+  document.getElementById("progress-text").textContent = txt;
+}
+
+// Manual
+document.getElementById("qr-manual").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const t = this.value.trim();
+    if (t) { adicionarLinhaTabela(parseQRCode(t)); this.value = ""; }
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  QR PARSER
+// ════════════════════════════════════════════════════════════
+function dividirCampos(texto) {
+  const campos = {};
+  const partes = texto.split(texto.includes("(") ? /\(/ : /\*/);
+  partes.forEach(p => {
+    const idx = p.search(/[:Ç]/);
+    if (idx > 0) { const c = p.slice(0,idx).trim(), v = p.slice(idx+1).trim(); if (c.length <= 6 && c && v) campos[c] = v; }
+  });
+  return campos;
+}
+function formatarData(d) {
+  const l = String(d).replace(/[^\d]/g,"");
+  return l.length === 8 ? `${l.slice(0,4)}-${l.slice(4,6)}-${l.slice(6,8)}` : "—";
+}
+function parseQRCode(text) {
+  const c = dividirCampos(text);
+  const base  = ["I2","I3","I5","I7","L"].reduce((s,k) => s+(parseFloat(c[k])||0), 0);
+  const iva   = ["I4","I6","I8"].reduce((s,k) => s+(parseFloat(c[k])||0), 0);
+  const total = parseFloat(c["O"]) || (base+iva);
+  return { documento: c["G"]||"—", data: formatarData(c["F"]), nifFornecedor: c["A"]||"—", nifComprador: c["B"]||"—", base: base.toFixed(2), iva: iva.toFixed(2), total: total.toFixed(2), fonte: "QR" };
+}
+
+// ════════════════════════════════════════════════════════════
+//  TABLE
+// ════════════════════════════════════════════════════════════
+let modoRestauracao = false;
+
+function chaveFatura(d) { return `${d.documento}|${d.nifFornecedor}|${d.data}`; }
+function existeNaBD(chave) { return JSON.parse(localStorage.getItem("fl_faturas")||"[]").some(f => chaveFatura(f) === chave); }
+
+function adicionarLinhaTabela(dados) {
+  const tbody = document.getElementById("fatura-tbody");
+  const chave = chaveFatura(dados);
+  if (!modoRestauracao && existeNaBD(chave)) {
+    const dupe = Array.from(tbody.querySelectorAll("tr")).find(tr => tr.dataset.chave === chave);
+    if (dupe) { dupe.classList.add("duplicada"); setTimeout(()=>dupe.classList.remove("duplicada"),2000); dupe.scrollIntoView({behavior:"smooth",block:"center"}); }
+    showToast("⚠️ Fatura duplicada: " + dados.documento, "error");
+    return;
+  }
+  Array.from(tbody.querySelectorAll("tr")).forEach(r => r.classList.remove("destacada"));
+  const badge = dados.fonte === "OCR" ? '<span style="font-size:0.68rem;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;margin-left:4px;">OCR</span>' : "";
+  const row = document.createElement("tr");
+  row.dataset.chave = chave;
+  row.innerHTML = `
+    <td>${dados.documento}${badge}</td>
+    <td>${dados.data}</td>
+    <td>${dados.nifFornecedor}</td>
+    <td>${dados.nifComprador}</td>
+    <td><input class="valor" value="${dados.base}"></td>
+    <td><input class="valor" value="${dados.iva}"></td>
+    <td><input class="valor" value="${dados.total}"></td>
+    <td><input class="classificacao" value="${dados.classificacao||''}"></td>
+    <td style="text-align:center;"><input type="checkbox" ${dados.paga?"checked":""}></td>
+    <td><button class="btn-delete-row" onclick="apagarLinha(this)">✕</button></td>`;
+  tbody.insertBefore(row, tbody.firstChild);
+  row.classList.add("destacada");
+  atualizarUI();
+  if (!modoRestauracao) salvarAutomaticamente();
+}
+
+function apagarLinha(btn) { btn.closest("tr").remove(); atualizarUI(); salvarAutomaticamente(); }
+
+function atualizarUI() {
+  const rows = document.querySelectorAll("#fatura-tbody tr");
+  document.getElementById("stat-total").textContent = rows.length;
+  let base=0, iva=0, pagas=0;
+  rows.forEach(tr => {
+    base  += parseFloat(tr.cells[4].querySelector("input").value)||0;
+    iva   += parseFloat(tr.cells[5].querySelector("input").value)||0;
+    if (tr.cells[8].querySelector("input").checked) pagas++;
+  });
+  document.getElementById("stat-total-valor").textContent = base.toFixed(2).replace(".",",") + " €";
+  document.getElementById("stat-total-iva").textContent   = iva.toFixed(2).replace(".",",") + " €";
+  document.getElementById("stat-pagas").textContent = pagas;
+  document.getElementById("empty-state").style.display    = rows.length === 0 ? "block" : "none";
+  document.querySelector(".table-wrap").style.display     = rows.length === 0 ? "none"  : "";
+}
+
+// ════════════════════════════════════════════════════════════
+//  DELETE ALL
+// ════════════════════════════════════════════════════════════
+function confirmarApagarTudo() {
+  const n = document.querySelectorAll("#fatura-tbody tr").length;
+  if (n === 0) { showToast("Não há faturas para apagar.", "info"); return; }
+  document.getElementById("confirm-title").textContent = `Apagar ${n} fatura(s)?`;
+  document.getElementById("confirm-msg").textContent   = `Esta ação é irreversível. Os ${n} registos serão eliminados da tabela e do armazenamento local.`;
+  document.getElementById("confirm-modal").classList.add("open");
+  document.getElementById("confirm-yes").onclick = () => {
+    document.getElementById("fatura-tbody").innerHTML = "";
+    localStorage.removeItem("fl_faturas");
+    fecharModal("confirm-modal");
+    atualizarUI();
+    showToast("Todas as faturas foram apagadas.", "success");
+  };
+}
+
+// ════════════════════════════════════════════════════════════
+//  EXPORT / BACKUP
+// ════════════════════════════════════════════════════════════
+function recolherDados() {
+  const d = [];
+  document.querySelectorAll("#fatura-tbody tr").forEach(tr => d.push({
+    documento:     tr.cells[0].textContent.replace(/OCR/,"").trim(),
+    data:          tr.cells[1].textContent.trim(),
+    nifFornecedor: tr.cells[2].textContent.trim(),
+    nifComprador:  tr.cells[3].textContent.trim(),
+    base:  tr.cells[4].querySelector("input").value,
+    iva:   tr.cells[5].querySelector("input").value,
+    total: tr.cells[6].querySelector("input").value,
+    classificacao: tr.cells[7].querySelector("input").value,
+    paga:  tr.cells[8].querySelector("input").checked
+  }));
+  return d;
+}
+
+function exportarCSV() {
+  const rows = recolherDados();
+  if (!rows.length) { showToast("Sem dados para exportar.", "info"); return; }
+  const header = ["Documento","Data","NIF Fornecedor","NIF Comprador","Valor Base","Valor IVA","Valor Total","Classificação","Paga"];
+  const csv = "\uFEFF" + [header, ...rows.map(r => [r.documento,r.data,r.nifFornecedor,r.nifComprador,r.base,r.iva,r.total,r.classificacao,r.paga?"Sim":"Não"])].map(l=>l.map(v=>`"${v}"`).join(";")).join("\r\n");
+  download(csv, `faturas_${hoje()}.csv`, "text/csv;charset=utf-8;");
+  showToast("CSV exportado!", "success");
+}
+function gerarBackup() {
+  const d = recolherDados();
+  if (!d.length) { showToast("Sem dados para guardar.", "info"); return; }
+  download(JSON.stringify(d,null,2), `faturas_backup_${hoje()}.json`, "application/json");
+  showToast("Backup criado!", "success");
+}
+function restaurarBackup() {
+  const inp = document.createElement("input"); inp.type="file"; inp.accept="application/json";
+  inp.onchange = () => {
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const d = JSON.parse(e.target.result);
+        if (!Array.isArray(d)) throw 0;
+        modoRestauracao = true;
+        document.getElementById("fatura-tbody").innerHTML = "";
+        d.reverse().forEach(x => adicionarLinhaTabela(x));
+        modoRestauracao = false;
+        salvarAutomaticamente();
+        showToast(`${d.length} faturas restauradas!`, "success");
+      } catch { showToast("❌ Ficheiro JSON inválido.", "error"); }
+    };
+    r.readAsText(inp.files[0]);
+  };
+  inp.click();
+}
+
+function salvarAutomaticamente() { localStorage.setItem("fl_faturas", JSON.stringify(recolherDados())); }
+
+// ════════════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════════════
+function hoje() { return new Date().toISOString().slice(0,10); }
+function download(data, name, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([data],{type}));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+function fecharModal(id) { document.getElementById(id).classList.remove("open"); }
+
+let toastT;
+function showToast(msg, type="info") {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "show " + type;
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = "", 3200);
+}
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+window.addEventListener("DOMContentLoaded", async () => {
+  // Restaurar dados locais primeiro (não bloqueia)
+  const saved = localStorage.getItem("fl_faturas");
+  if (saved) {
+    try {
+      modoRestauracao = true;
+      JSON.parse(saved).reverse().forEach(d => adicionarLinhaTabela(d));
+      modoRestauracao = false;
+    } catch {}
+  }
+  atualizarUI();
+
+  // Validar licença (pode mostrar modal ou bloqueio)
+  await iniciarValidacaoLicenca();
+});
+
+document.addEventListener("input",  e => { if (e.target.closest("#fatura-table")) { salvarAutomaticamente(); atualizarUI(); } });
+document.addEventListener("change", e => { if (e.target.closest("#fatura-table")) { salvarAutomaticamente(); atualizarUI(); } });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") { fecharModal("confirm-modal"); fecharModal("license-modal-overlay"); }
+});
+// Fechar modais ao clicar fora
+["confirm-modal"].forEach(id => {
+  document.getElementById(id).addEventListener("click", e => { if (e.target.id === id) fecharModal(id); });
+});
+</script>
+</body>
+</html>
